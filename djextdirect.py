@@ -89,7 +89,8 @@ class Provider( object ):
 
         >>> EXT_JS_PROVIDER = Provider( [name="Ext.app.REMOTING_API", autoadd=True] )
 
-        If autoadd is True, the api.js will include a line like such:
+        If autoadd is True, the api.js will include a line like such::
+
             Ext.Direct.addProvider( Ext.app.REMOTING_API );
 
         After instantiating the Provider, register functions to it like so:
