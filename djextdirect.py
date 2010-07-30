@@ -299,7 +299,21 @@ class Provider( object ):
                         break
                 if args:
                     data = args
+            
+            if data is not None:
+                datalen = len(data)
+            else:
+                datalen = 0
 
+            if datalen != len(func.EXT_argnames):
+                responses.append({
+                    'type': 'exception',
+                    'tid':  tid,
+                    'message': 'invalid arguments',
+                    'where': 'Expected %d, got %d' % ( len(func.EXT_argnames), len(data) )
+                    })
+                continue
+            
             try:
                 if data:
                     result = func( request, *data )
