@@ -68,10 +68,18 @@ Ext.ux.%(clsname)s = function( config ){
 
 Ext.extend( Ext.ux.%(clsname)s, Ext.form.FormPanel, {
     load: function(){
-        this.getForm().load({ params: {pk: this.pk} });
+        this.getForm().load({ params: Ext.applyIf( {pk: this.pk}, this.baseParams ) });
     },
     submit: function(){
-        this.getForm().submit({ params: {pk: this.pk} });
+        this.getForm().submit({
+            params: Ext.applyIf( {pk: this.pk}, this.baseParams ),
+            failure: function( form, action ){
+                if( action.failureType == Ext.form.Action.SERVER_INVALID &&
+                    typeof action.result.errors['__all__'] != 'undefined' ){
+                    Ext.Msg.alert( "Error", action.result.errors['__all__'] );
+                }
+            }
+        });
     },
 } );
 
@@ -232,30 +240,35 @@ class Provider( object ):
             It handles decoding requests, calling the appropriate function (if
             found) and encoding the response / exceptions.
         """
+        # First try to use request.POST, if that doesn't work check for req.raw_post_data.
+        # The other way round this might make more sense because the case that uses
+        # raw_post_data is way more common, but accessing request.POST after raw_post_data
+        # causes issues with Django's test client while accessing raw_post_data after
+        # request.POST does not.
         try:
-            rawjson  = simplejson.loads( request.raw_post_data )
-
-        except simplejson.JSONDecodeError:
-            # possibly a form submit / upload
+            jsoninfo = {
+                'action':  request.POST['extAction'],
+                'method':  request.POST['extMethod'],
+                'type':    request.POST['extType'],
+                'upload':  request.POST['extUpload'],
+                'tid':     request.POST['extTID'],
+            }
+        except (MultiValueDictKeyError, KeyError), err:
             try:
-                jsoninfo = {
-                    'action':  request.POST['extAction'],
-                    'method':  request.POST['extMethod'],
-                    'type':    request.POST['extType'],
-                    'upload':  request.POST['extUpload'],
-                    'tid':     request.POST['extTID'],
-                }
-            except (MultiValueDictKeyError, KeyError):
-                # malformed request
+                rawjson = simplejson.loads( request.raw_post_data )
+            except simplejson.JSONDecodeError:
                 return HttpResponse( simplejson.dumps({
                     'type':    'exception',
                     'message': 'malformed request',
-                    'where':   'router',
-                    "tid":     tid,
+                    'where':   unicode(err),
+                    "tid":     None, # dunno
                     }), mimetype="text/javascript" )
             else:
-                return self.process_form_request( request, jsoninfo )
+                return self.process_normal_request( request, rawjson )
+        else:
+            return self.process_form_request( request, jsoninfo )
 
+    def process_normal_request( self, request, rawjson ):
         if not isinstance( rawjson, list ):
             rawjson = [rawjson]
 
@@ -299,7 +312,7 @@ class Provider( object ):
                         break
                 if args:
                     data = args
-            
+
             if data is not None:
                 datalen = len(data)
             else:
@@ -313,7 +326,7 @@ class Provider( object ):
                     'where': 'Expected %d, got %d' % ( len(func.EXT_argnames), len(data) )
                     })
                 continue
-            
+
             try:
                 if data:
                     result = func( request, *data )
@@ -478,6 +491,8 @@ class Provider( object ):
                 'fileUpload: ' + simplejson.dumps(hasfiles) + ','
                 'defaults: { "anchor": "-20px" },'
                 'paramsAsHash: true,'
+                'baseParams: {},'
+                'autoScroll: true,'
                 """buttons: [{
                         text:    "Submit",
                         handler: this.submit,
@@ -494,22 +509,31 @@ class Provider( object ):
 
     def get_form_data( self, formname, request, pk ):
         formcls  = self.forms[formname]
-        instance = formcls.Meta.model.objects.get( pk=pk )
+        if pk != -1:
+            instance = formcls.Meta.model.objects.get( pk=pk )
+        else:
+            instance = None
         forminst = formcls( instance=instance )
 
         if hasattr( forminst, "EXT_authorize" ) and \
            forminst.EXT_authorize( request, "get" ) is False:
-            return { 'success': False, 'errors': {'': 'access denied'} }
+            return { 'success': False, 'errors': {'__all__': 'access denied'} }
 
         data = {}
         for fld in forminst.fields:
-            data[fld] = getattr( instance, fld )
+            if instance:
+                data[fld] = getattr( instance, fld )
+            else:
+                data[fld] = forminst.base_fields[fld].initial;
         return { 'data': data, 'success': True }
 
     def update_form_data( self, formname, request ):
-        pk = request.POST['pk']
+        pk = int(request.POST['pk'])
         formcls  = self.forms[formname]
-        instance = formcls.Meta.model.objects.get( pk=pk )
+        if pk != -1:
+            instance = formcls.Meta.model.objects.get( pk=pk )
+        else:
+            instance = None
         if request.POST['extUpload'] == "true":
             forminst = formcls( request.POST, request.FILES, instance=instance )
         else:
@@ -517,12 +541,14 @@ class Provider( object ):
 
         if hasattr( forminst, "EXT_authorize" ) and \
            forminst.EXT_authorize( request, "update" ) is False:
-            return { 'success': False, 'errors': {'': 'access denied'} }
+            return { 'success': False, 'errors': {'__all__': 'access denied'} }
 
         # save if either no usable validation method available or validation passes; and form.is_valid
-        if ( not hasattr( forminst, "EXT_validate" ) or not callable( forminst.EXT_validate )
-             or forminst.EXT_validate( request ) ) \
-           and forminst.is_valid():
+        if ( hasattr( forminst, "EXT_validate" ) and callable( forminst.EXT_validate )
+             and not forminst.EXT_validate( request ) ):
+            return { 'success': False, 'errors': {'__all__': 'pre-validation failed'} }
+
+        if forminst.is_valid():
             forminst.save()
             return { 'success': True }
         else:
