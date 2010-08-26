@@ -15,4 +15,7 @@
  *  GNU General Public License for more details.
 """
 
-from provider import Provider
+VERSION = ( 0, 3 )
+
+VERSIONSTR = "v%d.%d" % VERSION
+
