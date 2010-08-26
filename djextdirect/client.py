@@ -94,9 +94,10 @@ class Client(object):
         {'success': True}
     """
 
-    def __init__( self, apiurl, apiname="Ext.app.REMOTING_API" ):
+    def __init__( self, apiurl, apiname="Ext.app.REMOTING_API", cookie=None ):
         self.apiurl  = apiurl
         self.apiname = apiname
+        self.cookie  = cookie
 
         purl = urlparse( self.apiurl )
         conn = httplib.HTTPConnection( purl.netloc )
@@ -140,6 +141,8 @@ class Client(object):
         conn.putrequest( "POST", purl.path )
         conn.putheader( "Content-Type", "application/json" )
         conn.putheader( "Content-Length", len(data) )
+        if self.cookie:
+            conn.putheader( "Cookie", self.cookie )
         conn.endheaders()
         conn.send( data )
         resp = conn.getresponse()
@@ -153,6 +156,10 @@ class Client(object):
             raise ReturnedError( respdata['message'], respdata['where'] )
         if respdata['tid'] != reqtid:
             raise RequestError( 'TID mismatch' )
+
+        cookie = resp.getheader( "set-cookie" )
+        if cookie:
+            self.cookie = cookie.split(';')[0]
 
         return respdata['result']
 
