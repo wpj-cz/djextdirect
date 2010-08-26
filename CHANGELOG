@@ -1,0 +1,9 @@
+=====================
+djExtDirect changelog
+=====================
+
+Version 2.4beta2, 26 Aug 2010:
+------------------------------
+* Refactor the module to a package.
+* Add login/logout views.
+* Add a client implementation.
