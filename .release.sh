@@ -21,7 +21,7 @@ if hg tags | grep "${VERSIONSTR}" > /dev/null; then
     sleep 3
     MODFILE="${BASEDIR}/djextdirect/__init__.py"
     vi "$MODFILE" -c '/VERSION ='
-    echo hg commit "$MODFILE" -m 'Bump module version'
+    hg commit "$MODFILE" -m 'Bump module version'
 fi
 
 VERSIONSTR=`python -c 'from djextdirect import VERSIONSTR; print VERSIONSTR'`
@@ -34,9 +34,10 @@ rm "${HISTFILE}"
 echo "New version will be tagged ${VERSIONSTR}. If this is correct, hit enter to continue."
 read
 
-echo hg commit "${BASEDIR}/CHANGELOG" -m "Releasing ${VERSIONSTR}."
-echo hg tag "${VERSIONSTR}"
-echo hg push
+hg commit "${BASEDIR}/CHANGELOG" -m "Releasing ${VERSIONSTR}."
+hg tag "${VERSIONSTR}"
+hg push
 
 echo "You successfully released ${VERSIONSTR}!"
 
+python setup.py register
