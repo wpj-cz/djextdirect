@@ -62,7 +62,39 @@ class ReturnedError(Exception):
     pass
 
 class Client(object):
-    def __init__( self, apiurl, apiname ):
+    """ Ext.Direct client side implementation.
+
+        This class handles parsing an API specification, building proxy objects from it,
+        and making calls to the router specified in the API.
+
+        Instantiation:
+
+        >>> cli = Client( "http://localhost:8000/mumble/api/api.js", "Ext.app.REMOTING_API" )
+
+        The apiname parameter defaults to ``Ext.app.REMOTING_API`` and is used to select
+        the proper API variable from the API source.
+
+        The client will then create proxy objects for each action defined in the URL,
+        which are accessible as properties of the Client instance. Suppose your API defines
+        the ``Accounts`` and ``Mumble`` actions, then the client will provide those as such:
+
+        >>> cli.Accounts
+        <client.AccountsPrx object at 0x93d9e2c>
+        >>> cli.Mumble
+        <client.MumblePrx object at 0x93d9a2c>
+
+        These objects provide native Python methods for each method defined in the actions:
+
+        >>> cli.Accounts.login
+        <bound method AccountsPrx.login of <client.AccountsPrx object at 0x93d9e2c>>
+
+        So, in order to make a call over Ext.Direct, you would simply call the proxy method:
+
+        >>> cli.Accounts.login( "svedrin", "passwort" )
+        {'success': True}
+    """
+
+    def __init__( self, apiurl, apiname="Ext.app.REMOTING_API" ):
         self.apiurl  = apiurl
         self.apiname = apiname
 
