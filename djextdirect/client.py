@@ -166,11 +166,15 @@ class Client(object):
     def get_object( self, action ):
         """ Return a proxy object that has methods defined in the API. """
 
-        def makemethod( methname ):
+        def makemethod( methspec ):
             def func( self, *args ):
-                return self._cli.call( action, methname, *args )
+                if len(args) != methspec['len']:
+                    raise TypeError( '%s() takes exactly %d arguments (%d given)' % (
+                        methspec['name'], methspec['len'], len(args)
+                        ) )
+                return self._cli.call( action, methspec['name'], *args )
 
-            func.__name__ = methname
+            func.__name__ = methspec['name']
             return func
 
         def init( self, cli ):
@@ -181,6 +185,6 @@ class Client(object):
             }
 
         for methspec in self.api['actions'][action]:
-            attrs[methspec['name']] = makemethod( methspec['name'] )
+            attrs[methspec['name']] = makemethod( methspec )
 
         return type( action+"Prx", (object,), attrs )( self )
