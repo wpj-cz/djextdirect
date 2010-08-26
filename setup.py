@@ -8,6 +8,6 @@ setup(name='djextdirect',
       author="Michael Ziegler",
       author_email='diese-addy@funzt-halt.net',
       url='http://bitbucket.org/Svedrin/djextdirect/downloads',
-      py_modules=['djextdirect'],
+      packages=['djextdirect'],
      )
 

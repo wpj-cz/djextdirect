@@ -30,14 +30,6 @@ from django.utils.datastructures import MultiValueDictKeyError
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.safestring import mark_safe
 
-__author__ = "Michael Ziegler"
-__copyright__ = "Copyright (C) 2010, Michael Ziegler"
-__license__ = "GPL"
-__version__ = "0.1"
-__email__ = "diese-addy@funzt-halt.net"
-__status__ = "Development"
-
-
 def getname( cls_or_name ):
     if type(cls_or_name) not in ( str, unicode ):
         return cls_or_name.__name__
