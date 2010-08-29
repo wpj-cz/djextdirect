@@ -21,64 +21,19 @@ import functools
 import traceback
 from sys import stderr
 
-from django      import forms
-from django.http import HttpResponse, Http404
+from django.http import HttpResponse
 from django.conf import settings
-from django.conf.urls.defaults import patterns, url
+from django.conf.urls.defaults import patterns
 from django.core.urlresolvers  import reverse
 from django.utils.datastructures import MultiValueDictKeyError
 from django.views.decorators.csrf import csrf_exempt
-from django.utils.safestring import mark_safe
 
 def getname( cls_or_name ):
+    """ If cls_or_name is not a string, return its __name__. """
     if type(cls_or_name) not in ( str, unicode ):
         return cls_or_name.__name__
     return cls_or_name
 
-
-# Template used for the auto-generated form classes
-EXT_CLASS_TEMPLATE = """
-Ext.namespace('Ext.ux');
-
-Ext.ux.%(clsname)s = function( config ){
-    Ext.apply( this, config );
-
-    var defaultconf = %(defaultconf)s;
-
-    Ext.applyIf( this, defaultconf );
-    this.initialConfig = defaultconf;
-
-    Ext.ux.%(clsname)s.superclass.constructor.call( this );
-
-    this.form.api = %(apiconf)s;
-    this.form.paramsAsHash = true;
-
-    if( typeof config.pk != "undefined" ){
-        this.load();
-    }
-}
-
-Ext.extend( Ext.ux.%(clsname)s, Ext.form.FormPanel, {
-    load: function(){
-        this.getForm().load({ params: Ext.applyIf( {pk: this.pk}, this.baseParams ) });
-    },
-    submit: function(){
-        this.getForm().submit({
-            params: Ext.applyIf( {pk: this.pk}, this.baseParams ),
-            failure: function( form, action ){
-                if( action.failureType == Ext.form.Action.SERVER_INVALID &&
-                    typeof action.result.errors['__all__'] != 'undefined' ){
-                    Ext.Msg.alert( "Error", action.result.errors['__all__'] );
-                }
-            }
-        });
-    },
-} );
-
-Ext.reg( '%(clslowername)s', Ext.ux.%(clsname)s );
-"""
-# About the this.form.* lines, see
-# http://www.sencha.com/forum/showthread.php?96001-solved-Ext.Direct-load-data-in-extended-Form-fails-%28scope-issue%29
 
 class Provider( object ):
     """ Provider for Ext.Direct. This class handles building API information and
@@ -130,9 +85,8 @@ class Provider( object ):
         self.name     = name
         self.autoadd  = autoadd
         self.classes  = {}
-        self.forms    = {}
 
-    def register_method( self, cls_or_name, flags={} ):
+    def register_method( self, cls_or_name, flags=None ):
         """ Return a function that takes a method as an argument and adds that
             to cls_or_name.
 
@@ -143,62 +97,18 @@ class Provider( object ):
         """
         return functools.partial( self._register_method, cls_or_name, flags=flags )
 
-    def _register_method( self, cls_or_name, method, flags={} ):
+    def _register_method( self, cls_or_name, method, flags=None ):
         """ Actually registers the given function as a method of cls_or_name. """
         clsname = getname(cls_or_name)
         if clsname not in self.classes:
             self.classes[clsname] = {}
+        if flags is None:
+            flags = {}
         self.classes[ clsname ][ method.__name__ ] = method
         method.EXT_argnames = inspect.getargspec( method ).args[1:]
         method.EXT_len      = len( method.EXT_argnames )
         method.EXT_flags    = flags
         return method
-
-    def register_form( self, formclass ):
-        """ Register a Django Form class.
-
-            After registration, you will be able to retrieve an ExtJS form class
-            definition for this form under the URL "<formname>.js". Include this
-            script via a <script> tag just like the "api.js" for Ext.Direct.
-
-            The form class will then be created as Ext.ux.<FormName> and will
-            have a registered xtype of "formname".
-
-            When registering a form, the Provider will automatically generate and
-            export objects and methods for data transfer, so the form will be
-            ready to use.
-
-            To ensure that validation error messages are displayed properly, be
-            sure to call Ext.QuickTips.init() somewhere in your code.
-
-            In order to do extra validation, the Provider checks if your form class
-            has a method called EXT_validate, and if so, calls that method with the
-            request as parameter before calling is_valid() or save(). If EXT_validate
-            returns False, the form will not be saved and an error will be returned
-            instead. EXT_validate should update form.errors before returning False.
-        """
-        if not issubclass( formclass, forms.ModelForm ):
-            raise TypeError( "Ext.Direct provider can only handle ModelForms, '%s' is something else." % formclass.__name__ )
-
-        formname = formclass.__name__.lower()
-        self.forms[formname] = formclass
-
-        getfunc = functools.partial( self.get_form_data, formname )
-        getfunc.EXT_len = 1
-        getfunc.EXT_argnames = ["pk"]
-        getfunc.EXT_flags = {}
-
-        updatefunc = functools.partial( self.update_form_data, formname )
-        updatefunc.EXT_len = 1
-        updatefunc.EXT_argnames = ["pk"]
-        updatefunc.EXT_flags = { 'formHandler': True }
-
-        self.classes["XD_%s"%formclass.__name__] = {
-            "get":    getfunc,
-            "update": updatefunc,
-            }
-
-        return formclass
 
     @csrf_exempt
     def get_api( self, request ):
@@ -261,6 +171,7 @@ class Provider( object ):
             return self.process_form_request( request, jsoninfo )
 
     def process_normal_request( self, request, rawjson ):
+        """ Process standard requests (no form submission or file uploads). """
         if not isinstance( rawjson, list ):
             rawjson = [rawjson]
 
@@ -412,150 +323,12 @@ class Provider( object ):
         else:
             return HttpResponse( simplejson.dumps( response ), mimetype="text/javascript" )
 
-    def get_form( self, request, formname ):
-        """ Convert the form given in "formname" to an ExtJS FormPanel. """
-
-        if formname not in self.forms:
-            raise Http404(formname)
-
-        items = []
-        clsname = self.forms[formname].__name__
-        hasfiles = False
-
-        for fldname in self.forms[formname].base_fields:
-            field = self.forms[formname].base_fields[fldname]
-            extfld = {
-                "fieldLabel": field.label is not None and unicode(field.label) or fldname,
-                "name":       fldname,
-                "xtype":     "textfield",
-                #"allowEmpty": field.required,
-                }
-
-            if hasattr( field, "choices" ) and field.choices:
-                extfld.update({
-                    "name":       fldname,
-                    "hiddenName": fldname,
-                    "xtype":      "combo",
-                    "store":      field.choices,
-                    "typeAhead":  True,
-                    "emptyText":  'Select...',
-                    "triggerAction": 'all',
-                    "selectOnFocus": True,
-                    })
-            elif isinstance( field, forms.BooleanField ):
-                extfld.update({
-                    "xtype": "checkbox"
-                    })
-            elif isinstance( field, forms.IntegerField ):
-                extfld.update({
-                    "xtype": "numberfield",
-                    })
-            elif isinstance( field, forms.FileField ) or isinstance( field, forms.ImageField ):
-                hasfiles = True
-                extfld.update({
-                    "xtype":     "textfield",
-                    "inputType": "file"
-                    })
-            elif isinstance( field.widget, forms.Textarea ):
-                extfld.update({
-                    "xtype": "textarea",
-                    })
-            elif isinstance( field.widget, forms.PasswordInput ):
-                extfld.update({
-                    "xtype":     "textfield",
-                    "inputType": "password"
-                    })
-
-            items.append( extfld )
-
-            if field.help_text:
-                items.append({
-                    "xtype": "label",
-                    "text":  unicode(field.help_text),
-                    "cls":   "form_hint_label",
-                    })
-
-        clscode = EXT_CLASS_TEMPLATE % {
-            'clsname':      clsname,
-            'clslowername': formname,
-            'defaultconf':  '{'
-                'items:'    + simplejson.dumps(items, indent=4) + ','
-                'fileUpload: ' + simplejson.dumps(hasfiles) + ','
-                'defaults: { "anchor": "-20px" },'
-                'paramsAsHash: true,'
-                'baseParams: {},'
-                'autoScroll: true,'
-                """buttons: [{
-                        text:    "Submit",
-                        handler: this.submit,
-                        scope:   this
-                    }]"""
-                '}',
-            'apiconf': ('{'
-                'load:  ' + ("XD_%s.get"    % clsname) + ","
-                'submit:' + ("XD_%s.update" % clsname) + ","
-                "}"),
-            }
-
-        return HttpResponse( mark_safe( clscode ), mimetype="text/javascript" )
-
-    def get_form_data( self, formname, request, pk ):
-        formcls  = self.forms[formname]
-        if pk != -1:
-            instance = formcls.Meta.model.objects.get( pk=pk )
-        else:
-            instance = None
-        forminst = formcls( instance=instance )
-
-        if hasattr( forminst, "EXT_authorize" ) and \
-           forminst.EXT_authorize( request, "get" ) is False:
-            return { 'success': False, 'errors': {'__all__': 'access denied'} }
-
-        data = {}
-        for fld in forminst.fields:
-            if instance:
-                data[fld] = getattr( instance, fld )
-            else:
-                data[fld] = forminst.base_fields[fld].initial;
-        return { 'data': data, 'success': True }
-
-    def update_form_data( self, formname, request ):
-        pk = int(request.POST['pk'])
-        formcls  = self.forms[formname]
-        if pk != -1:
-            instance = formcls.Meta.model.objects.get( pk=pk )
-        else:
-            instance = None
-        if request.POST['extUpload'] == "true":
-            forminst = formcls( request.POST, request.FILES, instance=instance )
-        else:
-            forminst = formcls( request.POST, instance=instance )
-
-        if hasattr( forminst, "EXT_authorize" ) and \
-           forminst.EXT_authorize( request, "update" ) is False:
-            return { 'success': False, 'errors': {'__all__': 'access denied'} }
-
-        # save if either no usable validation method available or validation passes; and form.is_valid
-        if ( hasattr( forminst, "EXT_validate" ) and callable( forminst.EXT_validate )
-             and not forminst.EXT_validate( request ) ):
-            return { 'success': False, 'errors': {'__all__': 'pre-validation failed'} }
-
-        if forminst.is_valid():
-            forminst.save()
-            return { 'success': True }
-        else:
-            errdict = {}
-            for errfld in forminst.errors:
-                errdict[errfld] = "\n".join( forminst.errors[errfld] )
-            return { 'success': False, 'errors': errdict }
-
-    @property
-    def urls(self):
+    def get_urls(self):
         """ Return the URL patterns. """
         pat =  patterns('',
             (r'api.js$',  self.get_api ),
             (r'router/?', self.request ),
             )
-        if self.forms:
-            pat.append( url( r'(?P<formname>\w+).js$', self.get_form ) )
         return pat
+
+    urls = property(get_urls)
