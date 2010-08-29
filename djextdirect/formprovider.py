@@ -37,9 +37,11 @@ Ext.ux.%(clsname)s = function( config ){
     Ext.applyIf( this, defaultconf );
     this.initialConfig = defaultconf;
 
+    this.api = %(apiconf)s;
+
     Ext.ux.%(clsname)s.superclass.constructor.call( this );
 
-    this.form.api = %(apiconf)s;
+    this.form.api = this.api;
     this.form.paramsAsHash = true;
 
     if( typeof config.pk != "undefined" ){
@@ -68,6 +70,47 @@ Ext.reg( '%(clslowername)s', Ext.ux.%(clsname)s );
 """
 # About the this.form.* lines, see
 # http://www.sencha.com/forum/showthread.php?96001-solved-Ext.Direct-load-data-in-extended-Form-fails-%28scope-issue%29
+
+EXT_DYNAMICCHOICES_COMBO = """
+Ext.namespace('Ext.ux');
+
+Ext.ux.ChoicesCombo = function( config ){
+    Ext.apply( this, config );
+
+    Ext.applyIf( this, {
+        displayField:   this.name,
+        valueField:     this.name,
+        hiddenName:     this.name,
+        autoSelect:     false,
+        typeAhead:      true,
+        emptyText:      'Select...',
+        triggerAction:  'all',
+        selectOnFocus:  true,
+        });
+
+    this.triggerAction = 'all';
+    this.store = new Ext.data.DirectStore({
+        baseParams: {'pk': this.ownerCt.pk, 'field': this.name},
+        directFn: this.ownerCt.api.choices,
+        paramOrder: ['pk', 'field'],
+        reader: new Ext.data.JsonReader({
+            successProperty: 'success',
+            idProperty: this.valueField,
+            root: 'data',
+            fields: [this.valueField, this.displayField]
+        }),
+        autoLoad: true
+        });
+
+    Ext.ux.ChoicesCombo.superclass.constructor.call( this );
+    };
+
+Ext.extend( Ext.ux.ChoicesCombo, Ext.form.ComboBox, {
+
+    });
+
+Ext.reg( 'choicescombo', Ext.ux.ChoicesCombo );
+"""
 
 
 class FormProvider(Provider):
@@ -100,6 +143,9 @@ class FormProvider(Provider):
         Provider.__init__( self, name="Ext.app.REMOTING_API", autoadd=True )
         self.forms    = {}
 
+    def get_choices_combo_src( self, request ):
+        return HttpResponse( EXT_DYNAMICCHOICES_COMBO, mimetype="text/javascript" )
+
     def register_form( self, formclass ):
         """ Register a Django Form class. """
         if not issubclass( formclass, forms.ModelForm ):
@@ -118,9 +164,15 @@ class FormProvider(Provider):
         updatefunc.EXT_argnames = ["pk"]
         updatefunc.EXT_flags = { 'formHandler': True }
 
+        choicesfunc = functools.partial( self.get_field_choices, formname )
+        choicesfunc.EXT_len = 2
+        choicesfunc.EXT_argnames = ["pk", "field"]
+        choicesfunc.EXT_flags = {}
+
         self.classes["XD_%s" % formclass.__name__] = {
-            "get":    getfunc,
-            "update": updatefunc,
+            "get":     getfunc,
+            "update":  updatefunc,
+            "choices": choicesfunc,
             }
 
         return formclass
@@ -144,17 +196,28 @@ class FormProvider(Provider):
                 #"allowEmpty": field.required,
                 }
 
-            if hasattr( field, "choices" ) and field.choices:
-                extfld.update({
-                    "name":       fldname,
-                    "hiddenName": fldname,
-                    "xtype":      "combo",
-                    "store":      field.choices,
-                    "typeAhead":  True,
-                    "emptyText":  'Select...',
-                    "triggerAction": 'all',
-                    "selectOnFocus": True,
-                    })
+            if hasattr( field, "choices" ):
+                if field.choices:
+                    # Static choices dict
+                    extfld.update({
+                        "name":       fldname,
+                        "hiddenName": fldname,
+                        "xtype":      "combo",
+                        "store":      field.choices,
+                        "typeAhead":  True,
+                        "emptyText":  'Select...',
+                        "triggerAction": 'all',
+                        "selectOnFocus": True,
+                        })
+                else:
+                    # choices set but empty - load them dynamically when pk is known
+                    extfld.update({
+                        "name":       fldname,
+                        "xtype":      "choicescombo",
+                        "displayField": "v",
+                        "valueField":   "k",
+                        })
+                    pass
             elif isinstance( field, forms.BooleanField ):
                 extfld.update({
                     "xtype": "checkbox"
@@ -205,12 +268,26 @@ class FormProvider(Provider):
                     }]"""
                 '}',
             'apiconf': ('{'
-                'load:  ' + ("XD_%s.get"    % clsname) + ","
-                'submit:' + ("XD_%s.update" % clsname) + ","
+                'load:  '  + ("XD_%s.get"     % clsname) + ","
+                'submit:'  + ("XD_%s.update"  % clsname) + ","
+                'choices:' + ("XD_%s.choices" % clsname) + ","
                 "}"),
             }
 
         return HttpResponse( mark_safe( clscode ), mimetype="text/javascript" )
+
+    def get_field_choices( self, formname, request, pk, field ):
+        """ Create a bound instance of the form and return choices from the given field. """
+        formcls  = self.forms[formname]
+        if pk != -1:
+            instance = formcls.Meta.model.objects.get( pk=pk )
+        else:
+            instance = None
+        forminst = formcls( instance=instance )
+        return {
+            'success': True,
+            'data': [ {'k': c[0], 'v': c[1]} for c in forminst.fields[field].choices ]
+            }
 
     def get_form_data( self, formname, request, pk ):
         """ Called to get the current values when a form is to be displayed. """
@@ -268,6 +345,7 @@ class FormProvider(Provider):
         """ Return the URL patterns. """
         pat = Provider.get_urls(self)
         if self.forms:
+            pat.append( url( r'choicescombo.js$',      self.get_choices_combo_src ) )
             pat.append( url( r'(?P<formname>\w+).js$', self.get_form ) )
         return pat
 
