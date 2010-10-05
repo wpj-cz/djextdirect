@@ -158,7 +158,7 @@ class Provider( object ):
         except (MultiValueDictKeyError, KeyError), err:
             try:
                 rawjson = simplejson.loads( request.raw_post_data )
-            except simplejson.JSONDecodeError:
+            except getattr( simplejson, "JSONDecodeError", ValueError ):
                 return HttpResponse( simplejson.dumps({
                     'type':    'exception',
                     'message': 'malformed request',
