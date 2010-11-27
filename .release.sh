@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Create a new release of Mumble-Django.
+# Create a new release of djExtDirect.
 
 set -e
 set -u
