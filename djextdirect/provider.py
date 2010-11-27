@@ -15,7 +15,11 @@
  *  GNU General Public License for more details.
 """
 
-import simplejson
+try:
+    import simplejson
+except ImportError:
+    import json as simplejson
+
 import inspect
 import functools
 import traceback
