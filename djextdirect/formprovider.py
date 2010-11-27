@@ -36,6 +36,22 @@ Ext.namespace('Ext.ux');
 Ext.ux.%(clsname)s = function( config ){
     Ext.apply( this, config );
 
+    Ext.applyIf( this, {
+        defaults: { "anchor": "-20px" },
+        paramsAsHash: true,
+        baseParams: {},
+        autoScroll: true,
+        submitButtonText: "Submit"
+        } );
+    Ext.applyIf( this, {
+        buttons: [{
+                text:    this.submitButtonText,
+                handler: this.submit,
+                id:      '%(clsname)s_submit',
+                scope:   this
+            }]
+        });
+
     var defaultconf = %(defaultconf)s;
 
     Ext.applyIf( this, defaultconf );
@@ -51,6 +67,18 @@ Ext.ux.%(clsname)s = function( config ){
     if( typeof config.pk != "undefined" ){
         this.load();
     }
+
+    this.form.addEvents({
+        'submitSuccess': true,
+        'submitFailure': true
+    });
+
+    if( typeof config.listeners != "undefined" ){
+        if( typeof config.listeners.submitSuccess != "undefined" )
+            this.form.on("submitSuccess", config.listeners.submitSuccess);
+        if( typeof config.listeners.submitFailure != "undefined" )
+            this.form.on("submitFailure", config.listeners.submitFailure);
+    }
 }
 
 Ext.extend( Ext.ux.%(clsname)s, Ext.form.FormPanel, {
@@ -65,6 +93,10 @@ Ext.extend( Ext.ux.%(clsname)s, Ext.form.FormPanel, {
                     typeof action.result.errors['__all__'] != 'undefined' ){
                     Ext.Msg.alert( "Error", action.result.errors['__all__'] );
                 }
+                form.fireEvent("submitFailure", form, action);
+            },
+            success: function( form, action ){
+                form.fireEvent("submitSuccess", form, action);
             }
         });
     },
@@ -261,15 +293,6 @@ class FormProvider(Provider):
             'defaultconf':  '{'
                 'items:'    + simplejson.dumps(items, indent=4) + ','
                 'fileUpload: ' + simplejson.dumps(hasfiles) + ','
-                'defaults: { "anchor": "-20px" },'
-                'paramsAsHash: true,'
-                'baseParams: {},'
-                'autoScroll: true,'
-                """buttons: [{
-                        text:    "Submit",
-                        handler: this.submit,
-                        scope:   this
-                    }]"""
                 '}',
             'apiconf': ('{'
                 'load:  '  + ("XD_%s.get"     % clsname) + ","
