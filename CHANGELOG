@@ -2,6 +2,13 @@
 djExtDirect changelog
 =====================
 
+Version 2.4, 27 Nov 2010:
+------------------------------
+* Move Django Forms specific stuff into the FormProvider class.
+* Implement handling dynamically created field choices.
+* Add fallback to builtin json if simplejson is not available.
+* Add a customizable submit button and submit{Success,Failure} events.
+
 Version 2.4beta2, 26 Aug 2010:
 ------------------------------
 * Refactor the module to a package.
