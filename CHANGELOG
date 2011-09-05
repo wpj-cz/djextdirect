@@ -2,20 +2,20 @@
 djExtDirect changelog
 =====================
 
-Version 2.5, 05 Sep 2011:
+Version 0.5, 05 Sep 2011:
 ------------------------------
 * Correctly handle Django's CSRF mechanism, getting rid of csrf_exempt.
 * Add a view for the API that returns plain JSON (e.g. for Ext Designer).
 * Switch the mime type of responses to application/json.
 
-Version 2.4, 27 Nov 2010:
+Version 0.4, 27 Nov 2010:
 ------------------------------
 * Move Django Forms specific stuff into the FormProvider class.
 * Implement handling dynamically created field choices.
 * Add fallback to builtin json if simplejson is not available.
 * Add a customizable submit button and submit{Success,Failure} events.
 
-Version 2.4beta2, 26 Aug 2010:
+Version 0.3, 26 Aug 2010:
 ------------------------------
 * Refactor the module to a package.
 * Add login/logout views.
