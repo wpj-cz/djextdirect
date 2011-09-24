@@ -140,6 +140,7 @@ class Provider( object ):
         """ Introspect the methods and get a javascript description of the API
             that is meant to be embedded directly into the web site.
         """
+        request.META["CSRF_COOKIE_USED"] = True
         lines = ["%s = %s;" % ( self.name, simplejson.dumps({
             "url":     reverse( self.request ),
             "type":    "remoting",
@@ -164,6 +165,7 @@ class Provider( object ):
             It handles decoding requests, calling the appropriate function (if
             found) and encoding the response / exceptions.
         """
+        request.META["CSRF_COOKIE_USED"] = True
         # First try to use request.POST, if that doesn't work check for req.raw_post_data.
         # The other way round this might make more sense because the case that uses
         # raw_post_data is way more common, but accessing request.POST after raw_post_data
