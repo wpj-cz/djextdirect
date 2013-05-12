@@ -15,10 +15,7 @@
  *  GNU General Public License for more details.
 """
 
-try:
-    import simplejson
-except ImportError:
-    import json as simplejson
+import json
 
 import functools
 
@@ -293,8 +290,8 @@ class FormProvider(Provider):
             'clsname':      clsname,
             'clslowername': formname,
             'defaultconf':  '{'
-                'items:'    + simplejson.dumps(items, cls=DjangoJSONEncoder, indent=4) + ','
-                'fileUpload: ' + simplejson.dumps(hasfiles, cls=DjangoJSONEncoder) + ','
+                'items:'    + json.dumps(items, cls=DjangoJSONEncoder, indent=4) + ','
+                'fileUpload: ' + json.dumps(hasfiles, cls=DjangoJSONEncoder) + ','
                 '}',
             'apiconf': ('{'
                 'load:  '  + ("XD_%s.get"     % clsname) + ","
