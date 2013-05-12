@@ -2,6 +2,11 @@
 djExtDirect changelog
 =====================
 
+Version 0.8, 12 May 2013:
+------------------------------
+* Move from simplejson to the standard JSON module for Django 1.5
+  compatibility.
+
 Version 0.7, 30 Mar 2012:
 ------------------------------
 * Fix the way exception messages are passed to avoid decoding errors.
