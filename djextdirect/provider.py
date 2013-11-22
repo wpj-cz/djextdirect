@@ -23,7 +23,7 @@ from sys import stderr
 
 from django.http import HttpResponse
 from django.conf import settings
-from django.conf.urls.defaults import patterns
+from django.conf.urls import patterns
 from django.core.urlresolvers  import reverse
 from django.utils.datastructures import MultiValueDictKeyError
 from django.core.serializers.json import DjangoJSONEncoder
