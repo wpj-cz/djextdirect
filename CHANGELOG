@@ -2,6 +2,11 @@
 djExtDirect changelog
 =====================
 
+Version 0.9, 25 Nov 2013:
+------------------------------
+* Use json instead of simplejson.
+* Django 1.6 compatibility.
+
 Version 0.8, 12 May 2013:
 ------------------------------
 * Move from simplejson to the standard JSON module for Django 1.5
