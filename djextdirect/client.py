@@ -20,6 +20,7 @@ import httplib
 from threading import Lock
 from urlparse import urljoin, urlparse
 
+
 def lexjs(javascript):
     """ Parse the given javascript and return a dict of variables defined in there. """
     ST_NAME, ST_ASSIGN = range(2)
@@ -45,7 +46,10 @@ def lexjs(javascript):
         elif state == ST_ASSIGN:
             if   char == ';':
                 state = ST_NAME
-                foundvars[name] = json.loads(buf)
+                try:
+                    foundvars[name] = json.loads(buf)
+                except:
+                    pass
                 name = ""
                 buf  = ""
             else:
@@ -53,13 +57,16 @@ def lexjs(javascript):
 
     return foundvars
 
+
 class RequestError(Exception):
     """ Raised if the request returned a status code other than 200. """
     pass
 
+
 class ReturnedError(Exception):
     """ Raised if the "type" field in the response is "exception". """
     pass
+
 
 class Client(object):
     """ Ext.Direct client side implementation.
@@ -94,24 +101,50 @@ class Client(object):
         {'success': True}
     """
 
-    def __init__( self, apiurl, apiname="Ext.app.REMOTING_API", cookie=None ):
+    def get_post_data(self, data=None):
+        """
+        Adds username and password into post data
+        """
+        if not data:
+            data = {}
+        data["username"] = self.username
+        data["password"] = self.password
+        return json.dumps(data)
+
+    def __init__( self, apiurl, apiname="Ext.app.REMOTING_API", cookie=None, username=None, password=None ):
         self.apiurl  = apiurl
         self.apiname = apiname
         self.cookie  = cookie
+        self.username = username
+        self.password = password
 
-        purl = urlparse( self.apiurl )
+        data = self.get_post_data()
+        purl = urlparse(self.apiurl)
         conn = {
             "http":  httplib.HTTPConnection,
             "https": httplib.HTTPSConnection
-            }[purl.scheme.lower()]( purl.netloc )
-        conn.putrequest( "GET", purl.path )
+        }[purl.scheme.lower()](purl.netloc)
+        conn.putrequest( "POST", purl.path )
+        conn.putheader( "Content-Type", "application/json" )
+        conn.putheader( "Content-Length", str(len(data)) )
+        if self.cookie:
+            conn.putheader( "Cookie", self.cookie )
         conn.endheaders()
+        conn.send( data )
+
         resp = conn.getresponse()
-        foundvars = lexjs( resp.read() )
+
+        if resp.status != 200:
+            raise RequestError( resp.status, resp.reason )
+
+        foundvars = lexjs(resp.read())
         conn.close()
 
-        self.api = foundvars[apiname]
-        self.routerurl = urljoin( self.apiurl, self.api["url"] )
+        if not self.apiname in foundvars:
+            raise Exception("Wrong apiname '{apiname}'".format(apiname=self.apiname))
+
+        self.api = foundvars[self.apiname]
+        self.routerurl = urljoin(self.apiurl, self.api["url"])
 
         self._tid = 1
         self._tidlock = Lock()
@@ -131,19 +164,20 @@ class Client(object):
     def call( self, action, method, *args ):
         """ Make a call to Ext.Direct. """
         reqtid = self.tid
-        data=json.dumps({
+        data = self.get_post_data({
             'tid':    reqtid,
             'action': action,
             'method': method,
             'data':   args,
             'type':   'rpc'
-            })
+        })
 
         purl = urlparse( self.routerurl )
         conn = {
             "http":  httplib.HTTPConnection,
             "https": httplib.HTTPSConnection
-            }[purl.scheme.lower()]( purl.netloc )
+        }[purl.scheme.lower()](purl.netloc)
+        conn.debuglevel = 1
         conn.putrequest( "POST", purl.path )
         conn.putheader( "Content-Type", "application/json" )
         conn.putheader( "Content-Length", str(len(data)) )
@@ -180,7 +214,7 @@ class Client(object):
                         ) )
                 return self._cli.call( action, methspec['name'], *args )
 
-            func.__name__ = methspec['name']
+            func.__name__ = "{name}".format(name=methspec['name'])
             return func
 
         def init( self, cli ):
@@ -193,4 +227,4 @@ class Client(object):
         for methspec in self.api['actions'][action]:
             attrs[methspec['name']] = makemethod( methspec )
 
-        return type( action+"Prx", (object,), attrs )( self )
+        return type( "{action}Prx".format(action=action), (object,), attrs )( self )
