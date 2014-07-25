@@ -1,3 +1,3 @@
 # djextdirect #
 
-This repository contains fork of Svedrins djextdirect with support for JSON authorization and fixed Client class.
+This repository contains fork of Svedrins djextdirect with support for django authorization trought Client class.
