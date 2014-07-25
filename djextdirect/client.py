@@ -177,7 +177,6 @@ class Client(object):
             "http":  httplib.HTTPConnection,
             "https": httplib.HTTPSConnection
         }[purl.scheme.lower()](purl.netloc)
-        conn.debuglevel = 1
         conn.putrequest( "POST", purl.path )
         conn.putheader( "Content-Type", "application/json" )
         conn.putheader( "Content-Length", str(len(data)) )
